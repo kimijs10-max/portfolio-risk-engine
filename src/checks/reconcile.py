@@ -92,7 +92,13 @@ def reconcile(
     )
 
 
-def main() -> None:
+def main(show_values: bool = False) -> None:
+    """
+    Print the check. By default only the date, the verdict and the
+    difference as a percentage of NAV are shown, so the output is safe to
+    land in a scheduler log; the account number is never printed. Run the
+    script with --show-values to see the amounts in base currency.
+    """
     conn = db.connect()
     try:
         result = reconcile(conn)
@@ -100,13 +106,15 @@ def main() -> None:
         conn.close()
 
     status = "PASS" if result.passed else "FAIL"
-    print(f"Reconciliation as of {result.report_date} (account {result.account_id}): {status}")
-    print(f"  Computed stock value: {result.computed_stock:,.4f}")
-    print(f"  Reported stock value: {result.reported_stock:,.4f}")
-    print(f"  Computed total (NAV): {result.computed_total:,.4f}")
-    print(f"  Reported total (NAV): {result.reported_total:,.4f}")
-    print(f"  Difference: {result.diff:,.4f} ({result.diff_pct:.6f}%)")
+    print(f"Reconciliation as of {result.report_date}: {status}")
+    print(f"  Difference vs. reported NAV: {result.diff_pct:.6f}%")
+    if show_values:
+        print(f"  Computed stock value: {result.computed_stock:,.4f}")
+        print(f"  Reported stock value: {result.reported_stock:,.4f}")
+        print(f"  Computed total (NAV): {result.computed_total:,.4f}")
+        print(f"  Reported total (NAV): {result.reported_total:,.4f}")
+        print(f"  Difference: {result.diff:,.4f}")
 
 
 if __name__ == "__main__":
-    main()
+    main(show_values="--show-values" in sys.argv[1:])

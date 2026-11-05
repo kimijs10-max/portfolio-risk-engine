@@ -9,10 +9,11 @@ non-trivial: a Tokyo-listed holding can rise in yen while the yen falls
 against the base currency, and the two effects have to be separated before
 either can be judged.
 
-**Status:** data pipeline, P&L attribution, factor exposure, risk and the
-value/quality/momentum screener and intrinsic-value sizing complete, all
-validated against the broker's own NAV, plus historical and hypothetical
-stress tests, execution analysis and a one-page daily report.
+**Status:** complete. Data pipeline, P&L attribution, factor exposure,
+risk, stress tests, execution analysis, a value/quality/momentum screener
+with intrinsic-value sizing, and a one-page daily report run from a single
+entry point. The accounting is validated against the broker's own NAV, and
+the core maths is covered by tests against hand-worked answers.
 
 ---
 
@@ -22,9 +23,9 @@ stress tests, execution analysis and a one-page daily report.
 2. **Why?** — split into local price move, FX move, their interaction,
    dividends, and trading costs.
 3. **How much could it lose tomorrow?** — historical and parametric VaR,
-   beta, correlation and concentration; stress tests *(planned)*.
-4. **How well were trades executed?** — fills vs. arrival price and VWAP
-   *(planned)*.
+   beta, correlation and concentration; historical and hypothetical
+   stress tests.
+4. **How well were trades executed?** — fills vs. arrival price and VWAP.
 
 ---
 
@@ -902,6 +903,8 @@ Then valuation and sizing, and the checks on its maths:
 python src/sizing/intrinsic.py       # intrinsic value, margin of safety, targets
 python src/screener/candidates.py    # value screen across the universe
 python src/screener/fallen.py        # fell further than peers; fetches quarterlies
+python tests/test_pnl.py             # attribution split, holidays, position rebuild
+python tests/test_risk.py            # VaR and concentration against hand-worked values
 python tests/test_intrinsic.py       # valuation maths against closed forms
 python tests/test_stress.py          # stress maths against hand-worked paths
 python tests/test_tca.py             # execution maths and time-zone handling

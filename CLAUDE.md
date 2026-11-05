@@ -301,10 +301,11 @@ Phases 0–6 done; Phase 7 done except the LinkedIn write-up.
 All build phases are complete. Remaining: the LinkedIn write-up. Natural
 next step for the screen: a wider universe than sector peers.
 
-Still worth doing before the project is presentable: `tests/` covers only
-the valuation, stress, execution and screening maths (plain asserts; pytest is not
-installed); and `reconcile.py` prints the account number and NAV to the
-terminal, which `run_daily.py` would carry into any scheduler log.
+Pre-publication clean-up done 2026-11-05: `tests/` now also covers the
+P&L attribution and the VaR / concentration maths (plain asserts; pytest
+is not installed); `reconcile.py` prints only the verdict and the percent
+gap unless run with `--show-values`, and never the account number;
+`.gitignore` also excludes `*.xml`, `*.db`, `*.sqlite` anywhere in the tree.
 
 ## Notes
 Keep a running `NOTES.md` of problems hit and how they were solved.

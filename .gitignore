@@ -4,6 +4,11 @@
 # Data (top-level only -- NOT src/data/, which holds source code)
 /data/
 
+# Raw broker statements and databases anywhere in the tree
+*.xml
+*.db
+*.sqlite
+
 # Python
 __pycache__/
 *.py[cod]
