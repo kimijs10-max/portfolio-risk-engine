@@ -109,6 +109,58 @@ PEER_GROUPS: dict[str, list[str]] = {
 }
 
 
+# Sector screens: the same two-stage screen run over a sector the book does
+# not hold, rather than over a holding's peers. Kept apart from PEER_GROUPS
+# so running one never changes the holdings' universe or its results.
+#
+# Verification is stricter than for PEER_GROUPS. "Industrials" alone would
+# admit machinery, defence and staffing firms, so a candidate must also
+# report one of the listed industries. The groups the screen ranks within
+# are those reported industries, not anything assigned here: a railroad is
+# ranked against railroads, an airline against airlines.
+#
+# Scope follows the GICS Transportation industry group (air freight and
+# logistics, airlines, marine, ground transport, transport infrastructure).
+# US and Japanese listings, plus the European logistics majors; ADRs are
+# listed only where the company reports in dollars, since the screen
+# withholds any name whose reporting and trading currencies differ.
+SECTOR_SCREENS: dict[str, dict] = {
+    "transport": {
+        "label": "Transport & logistics",
+        "sector": "Industrials",
+        "industries": [
+            "Railroads", "Trucking", "Integrated Freight & Logistics",
+            "Airlines", "Airports & Air Services", "Marine Shipping",
+        ],
+        "candidates": [
+            # Railroads: US and Canadian Class I, JR group, Japanese private railways.
+            "UNP", "CSX", "NSC", "CP", "CNI",
+            "9020.T", "9021.T", "9022.T", "9142.T", "9005.T", "9001.T",
+            "9007.T", "9008.T", "9009.T", "9041.T", "9042.T", "9044.T", "9048.T",
+            # Trucking and parcel.
+            "ODFL", "SAIA", "XPO", "KNX", "JBHT", "WERN", "ARCB", "SNDR",
+            "HTLD", "MRTN", "TFII",
+            "9064.T", "9143.T", "9076.T", "9075.T", "9069.T", "9090.T",
+            "9072.T", "9070.T", "9068.T", "9066.T", "9065.T",
+            # Freight forwarding, contract logistics, warehousing.
+            "UPS", "FDX", "CHRW", "EXPD", "GXO", "HUBG", "FWRD", "RLGT",
+            "9147.T", "9301.T", "9302.T", "9303.T", "9364.T",
+            "DSV.CO", "DHL.DE", "KNIN.SW",
+            # Airlines and airports.
+            "DAL", "UAL", "LUV", "AAL", "ALK", "JBLU", "SKYW", "ALGT",
+            "9201.T", "9202.T", "9706.T",
+            # Marine shipping: Nippon Yusen and its existing peer group.
+            "9101.T", *PEER_GROUPS["9101.T"],
+        ],
+    },
+}
+
+
+def sector_universe(name: str) -> list[str]:
+    """Every candidate ticker in one sector screen."""
+    return sorted(set(SECTOR_SCREENS[name]["candidates"]))
+
+
 def universe() -> list[str]:
     """Every ticker the screen touches: holdings plus all candidate peers."""
     out: set[str] = set(PEER_GROUPS)

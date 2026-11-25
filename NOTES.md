@@ -1515,6 +1515,61 @@ the last is an inference that was never tested. It was the owner of the
 portfolio who pointed out that growth is part of firm-foundation value.
 
 
+## Sector screen: transport and logistics (2026-11-25)
+
+The value screen only ever ran over the holdings' peers. To run it over a
+sector the book does not hold, `config/peers.py` gains `SECTOR_SCREENS`,
+and `universe.py`, `fetch_universe.py` and `candidates.py` take
+`--sector NAME`. Nothing changes for the holdings' screen: a sector screen
+has its own universe, and fetching for it skips any name already stored,
+so the shipping names it shares with Nippon Yusen's peer group keep the
+data the holdings' screen used. (Checked by running the pre-change code on
+the same database: identical output.)
+
+**Two choices that differ from the peer groups.** Verification requires
+the reported *industry* as well as the sector, because "Industrials" alone
+would let in machinery and staffing companies. And the groups a name is
+ranked within are its reported industries, not lists assigned by hand, so
+a railroad is ranked against railroads.
+
+**Universe.** GICS transportation scope, US and Japanese listings plus the
+European logistics majors: 93 candidates, 78 verified. Dropped: six
+Japanese private railways and JR Kyushu, which report as conglomerates or
+consumer/real-estate companies -- real estate and retail are much of their
+business, so the drop is right; six tanker companies (Energy, as in the
+holdings' screen); two tickers Yahoo no longer resolves (9066.T, 9070.T).
+Five more are withheld because they report and trade in different
+currencies (CNI and CP report in CAD; COSCO, Pacific Basin, Maersk).
+
+**Result.** 7 of 73 pass stage one; 50 fail on PER alone. Two pass both
+stages: 9110.T NS United Kaiun (0.57x value, also a candidate in the
+holdings' screen) and 9068.T Maruzen Showa Unyu (0.67x). Five more passed
+stage one and looked cheap but were removed by a rule: Costamare, JR
+Central, Danaos and Sankyu for unstable cash flow, Global Ship Lease for a
+discount too large to believe.
+
+**Has the ranking worked here? No.** Value/price rank correlation with the
+next year's return relative to industry median is +0.015 and +0.011
+(p ≈ 0.9) in the two windows -- nothing. Stage one was +20.8% against
+-0.1% for failers in 2024-25 on nine names, then -0.7% against 0.0% in
+2025-26. One good year on nine names is not a signal. The holdings'
+universe gave a weak but consistent +0.09 rank correlation; transport
+gives none.
+
+**Why it may not work in this sector.** Transport earnings are cyclical
+(freight rates, fuel, airline demand), so a low PER often marks a peak in
+profits rather than a cheap company -- the stage-two cash-flow rule
+removed four of seven names for exactly that. A screen built on current
+profit and recent cash flow is weakest where both swing most.
+
+**Also noticed.** The holdings' screen now gives 27 passing stage one and
+5 candidates, against 23 and 6 recorded on 2026-11-05. It is the same
+code, so the change is in what it is allowed to read: fundamentals become
+usable 90 days after fiscal year-end, and several did between the two
+dates. Expected drift, not a bug; the published numbers are as of their
+date.
+
+
 ## Open items to revisit
 
 - Second linked account (`ACCOUNT_B`) throwing permission errors — Phase 6

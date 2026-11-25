@@ -298,8 +298,15 @@ Phases 0–6 done; Phase 7 done except the LinkedIn write-up.
   fallers are missing. A name with a one-day move over 50% in the window
   is set aside (an unadjusted 10:1 split made 8377.T look −84%; rerun
   `fetch_universe.py prices` if a split is suspected). See NOTES.md.
-All build phases are complete. Remaining: the LinkedIn write-up. Natural
-next step for the screen: a wider universe than sector peers.
+- Sector screens (`SECTOR_SCREENS` in `config/peers.py`, `--sector NAME`
+  on `universe.py`, `fetch_universe.py` and `candidates.py`,
+  `tests/test_universe.py`): the same two-stage screen over a sector the
+  book does not hold, ranked within each reported industry. Leaves the
+  holdings' screen untouched. **Transport (2026-11-25): 78 verified names,
+  7 pass stage one, 2 candidates (9110.T, 9068.T); rank correlation
+  ≈ 0 in both windows, so no evidence the ranking works in this
+  cyclical sector.** See NOTES.md.
+All build phases are complete. Remaining: the LinkedIn write-up.
 
 Pre-publication clean-up done 2026-11-05: `tests/` now also covers the
 P&L attribution and the VaR / concentration maths (plain asserts; pytest

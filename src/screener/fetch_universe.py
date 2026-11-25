@@ -42,24 +42,41 @@ from storage import db  # noqa: E402
 PRICE_PERIOD = "5y"
 
 
-def screen_universe(conn) -> list[str]:
-    """Holdings plus their verified peers, de-duplicated."""
-    groups, _ = universe.verified_peers(conn)
-    symbols: set[str] = set(groups)
+def screen_universe(conn, sector: str | None = None) -> list[str]:
+    """Holdings plus their verified peers, de-duplicated -- or, with
+    `sector`, that sector screen's verified names."""
+    groups, _ = (universe.verified_sector(conn, sector) if sector
+                 else universe.verified_peers(conn))
+    # Peer groups are keyed by a holding (a ticker); sector groups by an
+    # industry name, which is not a ticker.
+    symbols: set[str] = set() if sector else set(groups)
     for peers in groups.values():
         symbols |= set(peers)
     return sorted(symbols)
 
 
-def main(what: str = "all") -> None:
+def main(what: str = "all", sector: str | None = None) -> None:
     """`what` is "all", "fundamentals" or "prices" -- the two halves take
-    minutes each and are usually re-run for different reasons."""
+    minutes each and are usually re-run for different reasons.
+
+    With `sector`, only that screen's names that have nothing stored yet
+    are fetched. Names it shares with the holdings' universe (the shipping
+    peers) keep the data the holdings' screen was run on, so running a
+    sector screen never moves the holdings' results."""
     conn = db.connect()
     try:
-        symbols = screen_universe(conn)
+        symbols = screen_universe(conn, sector)
         if not symbols:
             print("No verified peer groups. Run src/screener/universe.py first.")
             return
+        if sector:
+            have = set(db.read_table(conn, "fundamentals")["symbol"]) \
+                & set(db.read_table(conn, "screen_prices")["symbol"])
+            print(f"{len(set(symbols) & have)} of {len(symbols)} already stored; "
+                  "fetching the rest.")
+            symbols = [s for s in symbols if s not in have]
+            if not symbols:
+                return
 
         print(f"Screening universe: {len(symbols)} symbols\n")
 
@@ -90,4 +107,11 @@ def main(what: str = "all") -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "all")
+    # python src/screener/fetch_universe.py [all|fundamentals|prices] [--sector NAME]
+    args = sys.argv[1:]
+    sector = None
+    if "--sector" in args:
+        i = args.index("--sector")
+        sector = args[i + 1]
+        del args[i:i + 2]
+    main(args[0] if args else "all", sector)

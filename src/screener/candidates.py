@@ -60,6 +60,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "config"))
 
+import peers as peer_config  # noqa: E402
 import valuation as cfg  # noqa: E402
 from data import fundamentals  # noqa: E402
 from screener import universe, validate  # noqa: E402
@@ -193,14 +194,20 @@ def suggest_weights(candidates: pd.DataFrame) -> pd.Series:
 # The screen.
 # --------------------------------------------------------------------------
 
-def _universe(conn: sqlite3.Connection) -> pd.DataFrame:
-    """symbol, group (the holding whose peer set it belongs to), name, currencies."""
-    groups, _ = universe.verified_peers(conn)
+def _universe(conn: sqlite3.Connection, sector: str | None = None) -> pd.DataFrame:
+    """symbol, group (the holding whose peer set it belongs to -- or, for a
+    sector screen, the reported industry), name, currencies."""
     meta = db.read_table(conn, "security_meta").set_index("symbol")
+    if sector:
+        groups, _ = universe.verified_sector(conn, sector)
+        members = {industry: (industry, symbols) for industry, symbols in groups.items()}
+    else:
+        groups, _ = universe.verified_peers(conn)
+        members = {holding: (f"{meta.loc[holding, 'industry']}", [holding, *peers])
+                   for holding, peers in groups.items()}
     rows, seen = [], set()
-    for holding, peers in groups.items():
-        label = f"{meta.loc[holding, 'industry']}"
-        for symbol in [holding, *peers]:
+    for holding, (label, symbols) in members.items():
+        for symbol in symbols:
             if symbol in seen or symbol not in meta.index:
                 continue
             seen.add(symbol)
@@ -215,13 +222,15 @@ def _universe(conn: sqlite3.Connection) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def screen(conn: sqlite3.Connection, knowledge_date: str | None = None) -> pd.DataFrame:
+def screen(conn: sqlite3.Connection, knowledge_date: str | None = None,
+           sector: str | None = None) -> pd.DataFrame:
     """
     Every universe name with its valuation and its status: one of
     "candidate", "excluded" (valued, but fails a rule) or "withheld" (no
-    valuation), with the reason in `reason`.
+    valuation), with the reason in `reason`. `sector` runs one of
+    config/peers.py's SECTOR_SCREENS instead of the holdings' peers.
     """
-    names = _universe(conn)
+    names = _universe(conn, sector)
     if names.empty:
         return names
     comparable = names[names["currency"] == names["financial_currency"]]
@@ -282,7 +291,7 @@ def screen(conn: sqlite3.Connection, knowledge_date: str | None = None) -> pd.Da
     return pd.DataFrame(rows)
 
 
-def validation(conn: sqlite3.Connection) -> pd.DataFrame:
+def validation(conn: sqlite3.Connection, sector: str | None = None) -> pd.DataFrame:
     """
     Did the valuation rank stocks correctly in the past?
 
@@ -294,7 +303,7 @@ def validation(conn: sqlite3.Connection) -> pd.DataFrame:
     """
     rows = []
     for kd in validate.KNOWLEDGE_DATES:
-        past = screen(conn, kd)
+        past = screen(conn, kd, sector)
         valued = past[past["status"] != "withheld"].copy()
         if valued.empty:
             continue
@@ -356,22 +365,30 @@ def _assumes(row) -> str:
     return f"{row.implied * 100:.0f}% ROE vs {row.delivered * 100:.0f}%"
 
 
-def main() -> None:
+def main(sector: str | None = None) -> None:
     conn = db.connect()
     try:
-        result = screen(conn)
+        result = screen(conn, sector=sector)
         if result.empty:
-            print("No verified universe. Run src/screener/universe.py and fetch_universe.py.")
+            print("No verified universe. Run src/screener/universe.py and fetch_universe.py"
+                  + (f" with --sector {sector}." if sector else "."))
             return
 
         print("=" * 96)
-        print("INTRINSIC-VALUE SCREEN")
+        if sector:
+            print(f"INTRINSIC-VALUE SCREEN: {peer_config.SECTOR_SCREENS[sector]['label'].upper()}")
+        else:
+            print("INTRINSIC-VALUE SCREEN")
         print("=" * 96)
         counts = result["status"].value_counts()
         print(f"{len(result)} names in the universe: {counts.get('candidate', 0)} candidates, "
               f"{counts.get('excluded', 0)} excluded, "
               f"{counts.get('withheld', 0)} that could not be assessed.")
-        print("The universe is the holdings' sector peers, not the market.\n")
+        if sector:
+            print("The universe is one sector's hand-listed, verified names, ranked within "
+                  "each reported industry.\n")
+        else:
+            print("The universe is the holdings' sector peers, not the market.\n")
 
         print("-" * 96)
         print("STAGE ONE -- PER, equity ratio, current ratio")
@@ -453,7 +470,13 @@ def main() -> None:
             print(f"       {names[:86]}{'...' if len(names) > 86 else ''}")
 
         print("\n" + "-" * 96)
-        print("PORTFOLIO THE RULE IMPLIES, against the book held today")
+        if sector:
+            # A sector screen sees one sector, so setting it against the
+            # whole book would read as "sell everything else".
+            held = {}
+            print("PORTFOLIO THE RULE IMPLIES, within this sector alone")
+        else:
+            print("PORTFOLIO THE RULE IMPLIES, against the book held today")
         print("-" * 96)
         print(f"  {cfg.SIZING_FRACTION:.2f} x margin of safety, at most {cfg.MAX_WEIGHT * 100:.0f}% "
               f"a name and {cfg.MAX_GROUP_WEIGHT * 100:.0f}% a peer group; remainder in cash.\n")
@@ -470,12 +493,15 @@ def main() -> None:
         by_group = weights.groupby(candidates.set_index("symbol")["group_label"]).sum()
         print("\n  by peer group: " + ", ".join(f"{g} {w * 100:.0f}%" for g, w in
                                                 by_group.sort_values(ascending=False).items()))
-        print("  'held' is each stock's share of the invested book, cash excluded.")
+        if sector:
+            print("  Not compared with the book held today: this universe is one sector.")
+        else:
+            print("  'held' is each stock's share of the invested book, cash excluded.")
 
         print("\n" + "-" * 96)
         print("HAS THIS RANKING WORKED? Valued as of a past date, tested on the next 12 months")
         print("-" * 96)
-        check = validation(conn)
+        check = validation(conn, sector)
         if check.empty:
             print("  Not enough history to test.")
         else:
@@ -505,4 +531,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # python src/screener/candidates.py                      holdings' peers
+    # python src/screener/candidates.py --sector transport   one sector screen
+    main(sys.argv[sys.argv.index("--sector") + 1] if "--sector" in sys.argv else None)

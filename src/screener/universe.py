@@ -131,24 +131,88 @@ def verified_peers(conn: sqlite3.Connection) -> tuple[dict[str, list[str]], pd.D
     return groups, pd.DataFrame(rejected)
 
 
+def verified_sector(conn: sqlite3.Connection, name: str) -> tuple[dict[str, list[str]], pd.DataFrame]:
+    """
+    One sector screen's candidates, grouped by their own reported industry.
+
+    A candidate survives only if it is an equity, reports the screen's
+    sector, and reports one of its industries. The returned groups are
+    keyed by that industry, so ranking within a group compares like with
+    like without any membership being assigned by hand.
+    """
+    spec = peer_config.SECTOR_SCREENS[name]
+    meta = db.read_table(conn, "security_meta")
+    if meta.empty:
+        return {}, pd.DataFrame()
+    lookup = meta.set_index("symbol")
+    groups: dict[str, list[str]] = {}
+    rejected = []
+    for symbol in peer_config.sector_universe(name):
+        if symbol not in lookup.index:
+            reason = "unresolved"
+        elif str(lookup.loc[symbol, "quote_type"]).upper() != "EQUITY":
+            reason = f"not an equity ({lookup.loc[symbol, 'quote_type']})"
+        elif lookup.loc[symbol, "sector"] != spec["sector"]:
+            reason = f"sector {lookup.loc[symbol, 'sector']!r}, expected {spec['sector']!r}"
+        elif lookup.loc[symbol, "industry"] not in spec["industries"]:
+            reason = f"industry {lookup.loc[symbol, 'industry']!r} is outside the screen"
+        else:
+            groups.setdefault(lookup.loc[symbol, "industry"], []).append(symbol)
+            continue
+        rejected.append({"holding": spec["label"], "symbol": symbol, "reason": reason})
+    return groups, pd.DataFrame(rejected)
+
+
+def resolve(conn: sqlite3.Connection, symbols: list[str]) -> pd.DataFrame:
+    """Fetch metadata for any symbol not already stored; return the stored rows."""
+    stored = db.read_table(conn, "security_meta")
+    # A row stored before financial_currency existed is refetched too.
+    known = set(stored.loc[stored["financial_currency"].notna(), "symbol"]) \
+        if not stored.empty else set()
+    todo = [s for s in symbols if s not in known]
+    if todo:
+        print(f"Resolving {len(todo)} new tickers "
+              f"({len(symbols) - len(todo)} already known)...")
+        meta = fetch_meta(todo)
+        if not meta.empty:
+            db.upsert_df(conn, "security_meta", meta)
+    else:
+        print(f"All {len(symbols)} tickers already resolved.")
+    return db.read_table(conn, "security_meta")
+
+
+def main_sector(name: str) -> None:
+    conn = db.connect()
+    try:
+        symbols = peer_config.sector_universe(name)
+        meta = resolve(conn, symbols)
+        lookup = meta.set_index("symbol")
+        groups, rejected = verified_sector(conn, name)
+        label = peer_config.SECTOR_SCREENS[name]["label"]
+        kept = sum(len(v) for v in groups.values())
+        print("\n" + "=" * 76)
+        print(f"VERIFIED SECTOR SCREEN: {label} -- {kept} of {len(symbols)} candidates")
+        print("=" * 76)
+        for industry, members in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+            print(f"\n  {industry}  ({len(members)})")
+            for s in members:
+                print(f"     {s:<12} {str(lookup.loc[s, 'short_name'])[:34]:<36}"
+                      f"{lookup.loc[s, 'currency']}")
+        if not rejected.empty:
+            print("\n" + "=" * 76)
+            print(f"DROPPED ({len(rejected)})")
+            print("=" * 76)
+            for _, row in rejected.iterrows():
+                print(f"  {row['symbol']:<14} {row['reason']}")
+    finally:
+        conn.close()
+
+
 def main() -> None:
     conn = db.connect()
     try:
         symbols = peer_config.universe()
-        stored = db.read_table(conn, "security_meta")
-        # A row stored before financial_currency existed is refetched too.
-        known = set(stored.loc[stored["financial_currency"].notna(), "symbol"]) \
-            if not stored.empty else set()
-        todo = [s for s in symbols if s not in known]
-        if todo:
-            print(f"Resolving {len(todo)} new tickers "
-                  f"({len(symbols) - len(todo)} already known)...")
-            meta = fetch_meta(todo)
-            if not meta.empty:
-                db.upsert_df(conn, "security_meta", meta)
-        else:
-            print(f"All {len(symbols)} tickers already resolved.")
-        meta = db.read_table(conn, "security_meta")
+        meta = resolve(conn, symbols)
         resolved = meta[meta["symbol"].isin(symbols)]
         print(f"\nsecurity_meta  {len(resolved):>5} resolved of "
               f"{len(symbols)} candidates")
@@ -182,4 +246,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # python src/screener/universe.py                      holdings' peer groups
+    # python src/screener/universe.py --sector transport   one sector screen
+    if "--sector" in sys.argv:
+        main_sector(sys.argv[sys.argv.index("--sector") + 1])
+    else:
+        main()
